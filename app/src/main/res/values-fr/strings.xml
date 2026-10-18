@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Sente - GO en ligne</string>
+    <string name="app_name">Sente Sensei - GO en ligne</string>
     <string name="create_account_prompt">Pas de compte OGS ? Créez-en un <b>ici</b> !</string>
     <string name="login_to_ogs">Connexion à OGS</string>
     <string name="create_account">Créer un compte OGS</string>
@@ -780,4 +780,26 @@ Si tu réussis, Blanc aura le plus grand mal à faire vivre ses deux groupes."]]
 Cependant, le territoire du bord inférieur n'appartient pas entièrement à Blanc.
 
 Coupons le mur blanc."]]></string>
+    <!-- Go Sensei fork: KataGo analysis of finished games -->
+    <string name="analysis_engine_starting">Démarrage de KataGo…</string>
+    <string name="analysis_engine_failed">KataGo n\'a pas pu démarrer</string>
+    <string name="analysis_lead">%1$s mène de %2$.1f pts</string>
+    <string name="analysis_even">Partie équilibrée</string>
+    <string name="analysis_black">Noir</string>
+    <string name="analysis_white">Blanc</string>
+    <string name="analysis_black_winrate">Victoire Noir %1$.0f %%</string>
+    <string name="analysis_visits">%1$d visites</string>
+    <string name="analysis_suggestions">Suggestions</string>
+    <string name="analysis_territory">Territoires</string>
+    <string name="analysis_review_start">Analyser toute la partie</string>
+    <string name="analysis_review_progress">Revue de la partie… %1$d/%2$d</string>
+    <string name="analysis_review_error">La revue a échoué : %1$s</string>
+    <string name="analysis_mistakes_mine">Tes erreurs</string>
+    <string name="analysis_mistakes_all">Erreurs</string>
+    <string name="analysis_no_mistakes">Aucune erreur notable</string>
+    <string name="analysis_played_next">Joué dans la partie : %1$s</string>
+    <string name="analysis_points_lost">−%1$.1f pts</string>
+    <string name="analysis_good_move">bon coup</string>
+    <string name="analysis_variation">Variante</string>
+    <string name="analysis_score_graph">Score (Noir en haut)</string>
 </resources>

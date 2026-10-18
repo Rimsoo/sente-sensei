@@ -28,7 +28,17 @@ data class Query (
         val avoidMoves: List<List<String>>? = null,
         val allowMoves: List<List<String>>? = null,
         val overrideSettings: OverrideSettings? = null,
-        val priority: Int? = null
+        val priority: Int? = null,
+        // Go Sensei: progressive results (seconds between partial responses)
+        val reportDuringSearchEvery: Float? = null,
+)
+
+// Go Sensei: stops a running query (see "terminate" in Analysis_Engine.md)
+@Serializable
+data class TerminateQuery(
+        val id: String,
+        val action: String = "terminate",
+        val terminateId: String,
 )
 
 // humanSLProfile format: "rank_{RANK}" (or "preaz_{RANK}"), RANK spanning 20k-9d - see

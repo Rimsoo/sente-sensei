@@ -1,6 +1,9 @@
 package io.zenandroid.onlinego.ui.screens.game
 
 import androidx.annotation.StringRes
+import io.zenandroid.onlinego.ai.KataGoAnalysisEngine
+import io.zenandroid.onlinego.ui.screens.game.analysis.GameAnalysisController
+import io.zenandroid.onlinego.ui.screens.game.analysis.KataGoState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.NextPlan
 import androidx.compose.material.icons.automirrored.rounded.Undo
@@ -56,6 +59,7 @@ import io.zenandroid.onlinego.data.repositories.LoginStatus
 import io.zenandroid.onlinego.data.repositories.SettingsRepository
 import io.zenandroid.onlinego.data.repositories.UserSessionRepository
 import io.zenandroid.onlinego.gamelogic.RulesManager
+import io.zenandroid.onlinego.gamelogic.Util
 import io.zenandroid.onlinego.gamelogic.RulesManager.isPass
 import io.zenandroid.onlinego.gamelogic.ScoreEstimator
 import io.zenandroid.onlinego.ui.composables.BottomBarButton
@@ -91,6 +95,11 @@ import io.zenandroid.onlinego.ui.screens.game.UserAction.ChatDialogDismiss
 import io.zenandroid.onlinego.ui.screens.game.UserAction.ChatSend
 import io.zenandroid.onlinego.ui.screens.game.UserAction.DownloadSGF
 import io.zenandroid.onlinego.ui.screens.game.UserAction.GameInfoClick
+import io.zenandroid.onlinego.ui.screens.game.UserAction.KataGoGoToMove
+import io.zenandroid.onlinego.ui.screens.game.UserAction.KataGoPlayMove
+import io.zenandroid.onlinego.ui.screens.game.UserAction.KataGoStartReview
+import io.zenandroid.onlinego.ui.screens.game.UserAction.KataGoToggleHints
+import io.zenandroid.onlinego.ui.screens.game.UserAction.KataGoToggleOwnership
 import io.zenandroid.onlinego.ui.screens.game.UserAction.GameInfoDismiss
 import io.zenandroid.onlinego.ui.screens.game.UserAction.GameOverDialogAnalyze
 import io.zenandroid.onlinego.ui.screens.game.UserAction.GameOverDialogDismiss
@@ -153,8 +162,12 @@ class GameViewModel(
   private val getUserStatsUseCase: GetUserStatsUseCase,
   private val appCoroutineScope: CoroutineScope,
   private val notificationUtils: NotificationUtils,
+  kataGoAnalysisEngine: KataGoAnalysisEngine,
   savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+  // Go Sensei fork: KataGo analysis and review of finished games
+  private val kataGo = GameAnalysisController(kataGoAnalysisEngine, viewModelScope, appCoroutineScope)
 
   // Need to add a MonotonicFrameClock
   // See: https://github.com/cashapp/molecule/#frame-clock
@@ -261,6 +274,15 @@ class GameViewModel(
           game?.let { calculateAnalysisPosition(it) }
         }
       }
+      // Go Sensei fork: engine analysis only for finished games (OGS forbids it during play)
+      val kataGoActive = analyzeMode && !estimateMode && game?.phase == Phase.FINISHED
+      if (kataGoActive) {
+        LaunchedEffect(analysisShownMoveNumber, currentVariation, game?.moves?.size) {
+          game?.let { kataGo.analyze(it, analysisShownMoveNumber, currentVariation) }
+        }
+      } else {
+        LaunchedEffect(Unit) { kataGo.stopLive() }
+      }
       if (estimateMode && game != null) {
         LaunchedEffect(analysisPosition, currentGamePosition) {
           withContext(Dispatchers.Default) {
@@ -319,6 +341,9 @@ class GameViewModel(
         opponentRequestedUndo && dismissedUndoDialogAtMove != gameState?.moves?.size
 
       val shownPosition = getShownPosition()
+      val kataGoState: KataGoState? = game?.takeIf { kataGoActive }?.let {
+        kataGo.uiState(it, userId, analysisShownMoveNumber, currentVariation)
+      }
 
       val isMyTurn =
         game?.phase == Phase.PLAY &&
@@ -460,8 +485,9 @@ class GameViewModel(
         bottomText = bottomText,
         retryMoveDialogShowing = retrySendMoveDialogShowing,
         koMoveDialogShowing = koMoveDialogShowing,
-        showAnalysisPanel = false,
+        showAnalysisPanel = kataGoState != null,
         showPlayers = true,
+        kataGo = kataGoState,
         showTimers = gameFinished == false,
         passDialogShowing = passDialogShowing,
         resignDialogShowing = resignDialogShowing,
@@ -784,6 +810,7 @@ class GameViewModel(
   }
 
   override fun onCleared() {
+    kataGo.close()
     appCoroutineScope.launch(Dispatchers.IO) {
       gameConnection.close()
     }
@@ -902,6 +929,18 @@ class GameViewModel(
       is BoardCellDragged -> onCellTracked(action.cell)
       is BoardCellTapUp -> onCellTapUp(action.cell)
       is BottomButtonPressed -> onButtonPressed(action.button)
+      KataGoToggleHints -> kataGo.showHints = !kataGo.showHints
+      KataGoToggleOwnership -> kataGo.showOwnership = !kataGo.showOwnership
+      KataGoStartReview -> gameState?.let { kataGo.startReview(it) }
+      is KataGoGoToMove -> {
+        currentVariation = null
+        analysisShownMoveNumber = action.moveNumber.coerceIn(0, gameState?.moves?.size ?: 0)
+      }
+
+      is KataGoPlayMove -> analysisPosition?.let { pos ->
+        val cell = Util.getCoordinatesFromGTP(action.move, pos.boardHeight)
+        onCellTapUp(cell)
+      }
       CancelDialogConfirm -> {
         cancelDialogShowing = false
         gameConnection.abortGame()
@@ -1093,6 +1132,8 @@ data class GameState(
   val showPlayers: Boolean,
   val showTimers: Boolean,
   val showAnalysisPanel: Boolean,
+  // Go Sensei fork: KataGo analysis of finished games (null when not analysing)
+  val kataGo: KataGoState? = null,
   val passDialogShowing: Boolean,
   val resignDialogShowing: Boolean,
   val cancelDialogShowing: Boolean,
@@ -1284,6 +1325,12 @@ sealed class Button(
 
 sealed interface UserAction {
   class BottomButtonPressed(val button: Button) : UserAction
+  // Go Sensei fork
+  object KataGoToggleHints : UserAction
+  object KataGoToggleOwnership : UserAction
+  object KataGoStartReview : UserAction
+  class KataGoGoToMove(val moveNumber: Int) : UserAction
+  class KataGoPlayMove(val move: String) : UserAction
   class BoardCellDragged(val cell: Cell) : UserAction
   class BoardCellTapUp(val cell: Cell) : UserAction
   object GameInfoClick : UserAction

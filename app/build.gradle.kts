@@ -19,7 +19,8 @@ android {
   defaultConfig {
     // We still need this for API 23 and lower. Remove when minsdk = 24
     vectorDrawables.useSupportLibrary = true
-    applicationId = "io.zenandroid.onlinego"
+    // Fork Go Sensei : identifiant distinct pour coexister avec Sente officiel
+    applicationId = "io.github.rimsoo.sentesensei"
     minSdk = libs.versions.minSdk.get().toInt()
     targetSdk = libs.versions.targetSdk.get().toInt()
     versionCode = 42
@@ -36,10 +37,11 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      manifestPlaceholders["crashlyticsCollectionEnabled"] = true
-      manifestPlaceholders["analyticsCollectionEnabled"] = true
+      // Fork Go Sensei : pas de remontée vers le Firebase de l'appli officielle
+      manifestPlaceholders["crashlyticsCollectionEnabled"] = false
+      manifestPlaceholders["analyticsCollectionEnabled"] = false
       configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
-        mappingFileUploadEnabled = true
+        mappingFileUploadEnabled = false
       }
     }
     debug {

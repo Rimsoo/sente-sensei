@@ -110,6 +110,9 @@ import io.zenandroid.onlinego.ui.screens.game.Button.Previous
 import io.zenandroid.onlinego.ui.screens.game.Button.Resign
 import io.zenandroid.onlinego.ui.screens.game.Event.NavigateToGame
 import io.zenandroid.onlinego.ui.screens.game.Event.OpenURL
+import io.zenandroid.onlinego.ui.screens.game.analysis.AnalysisPanel
+import io.zenandroid.onlinego.ui.screens.game.analysis.boardCandidates
+import io.zenandroid.onlinego.ui.screens.game.analysis.boardOwnership
 import io.zenandroid.onlinego.ui.screens.game.UserAction.BlackPlayerClicked
 import io.zenandroid.onlinego.ui.screens.game.UserAction.BoardCellDragged
 import io.zenandroid.onlinego.ui.screens.game.UserAction.BoardCellTapUp
@@ -260,10 +263,11 @@ fun GameContent(
         onBack = onBack,
         onUserAction = onUserAction
       )
-      if (state.showAnalysisPanel) {
-        Spacer(modifier = Modifier.weight(1f)) // Placeholder
-      }
-      if (state.showPlayers) {
+      val kataGo = state.kataGo
+      if (kataGo != null) {
+        // Go Sensei fork: KataGo analysis replaces the player cards while analysing
+        AnalysisPanel(kataGo, onUserAction, modifier = Modifier.weight(1f))
+      } else if (state.showPlayers) {
         BlackPlayerCard(
           state, onUserAction,
           modifier = Modifier
@@ -294,7 +298,7 @@ fun GameContent(
           .padding(4.dp)
           .align(CenterHorizontally),
       )
-      if (state.showPlayers) {
+      if (state.showPlayers && kataGo == null) {
         WhitePlayerCard(
           state, onUserAction,
           modifier = Modifier
@@ -328,7 +332,9 @@ fun GameContent(
               .padding(4.dp)
               .align(CenterHorizontally),
           )
-          if (state.showPlayers) {
+          if (state.kataGo != null) {
+            AnalysisPanel(state.kataGo, onUserAction, modifier = Modifier.weight(1f))
+          } else if (state.showPlayers) {
             BlackPlayerCard(
               state, onUserAction,
               modifier = Modifier
@@ -580,6 +586,8 @@ private fun Board(
     fadeOutRemovedStones = state.fadeOutRemovedStones,
     candidateMove = state.candidateMove,
     candidateMoveType = state.position?.nextToMove,
+    candidates = state.kataGo?.boardCandidates(state.gameHeight),
+    ownership = state.kataGo?.boardOwnership(),
     onTapMove = { onUserAction(BoardCellDragged(it)) },
     onTapUp = { onUserAction(BoardCellTapUp(it)) },
     modifier = modifier

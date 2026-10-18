@@ -9,11 +9,18 @@ import io.zenandroid.onlinego.data.model.katago.KataGoResponse.ErrorResponse
 import io.zenandroid.onlinego.data.model.katago.KataGoResponse.Response
 import io.zenandroid.onlinego.data.model.katago.OverrideSettings
 import io.zenandroid.onlinego.data.model.katago.Query
+import io.zenandroid.onlinego.data.model.katago.TerminateQuery
 import io.zenandroid.onlinego.gamelogic.Util
 import io.zenandroid.onlinego.utils.CrashReporter
 import io.zenandroid.onlinego.utils.appJson
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onSubscription
+import kotlinx.coroutines.flow.transformWhile
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
@@ -32,7 +39,12 @@ class KataGoAnalysisEngine(private val context: Context) {
   private var writer: OutputStreamWriter? = null
   private var reader: BufferedReader? = null
   private val requestIDX = AtomicLong(0)
-  private val responseFlow = MutableSharedFlow<KataGoResponse>(extraBufferCapacity = 64)
+  // Large buffer: a whole-game review (analyzeTurns) can produce hundreds of responses in a burst,
+  // and tryEmit silently drops them when the buffer is full.
+  private val responseFlow = MutableSharedFlow<KataGoResponse>(extraBufferCapacity = 1024)
+  // Number of screens currently using the engine (local AI game, OGS game analysis...). The process
+  // is only stopped when the last one releases it, so they don't kill each other's searches.
+  private var users = 0
 
   // Callers also raise maxVisits to at least this many - KataGo spins up this many search
   // threads per query regardless of budget, wasting the rest otherwise.
@@ -40,6 +52,28 @@ class KataGoAnalysisEngine(private val context: Context) {
   private val netFile by lazy { File(context.filesDir, "katagonet.gz") }
   private val humanNetFile by lazy { File(context.filesDir, "katagohumannet.gz") }
   private val cfgFile by lazy { File(context.filesDir, "katago.cfg") }
+
+  /** Registers a user of the engine and starts it if needed. Blocking: call from Dispatchers.IO. */
+  @Throws(IOException::class)
+  @Synchronized
+  fun acquire() {
+    users++
+    try {
+      start()
+    } catch (e: Exception) {
+      users--
+      throw e
+    }
+  }
+
+  /** Counterpart of [acquire]: the engine stops (after a grace period) once nobody uses it. */
+  @Synchronized
+  fun release() {
+    users = (users - 1).coerceAtLeast(0)
+    if (users == 0) {
+      stop()
+    }
+  }
 
   @Throws(IOException::class)
   @Synchronized
@@ -143,9 +177,30 @@ class KataGoAnalysisEngine(private val context: Context) {
     includeMovesOwnership: Boolean? = null,
     includePolicy: Boolean? = null,
     overrideSettings: OverrideSettings? = null
-  ): Response {
-    val id = generateId()
+  ): Response = analyze(
+    buildQuery(
+      sequence, komi, rules, maxVisits, includeOwnership, includeMovesOwnership,
+      includePolicy, overrideSettings
+    )
+  ).first { !it.isDuringSearch }
 
+  /**
+   * Builds a query from a list of positions: the first one (no last move) gives the initial stones,
+   * each following one contributes its last move.
+   */
+  fun buildQuery(
+    sequence: List<Position>,
+    komi: Float? = null,
+    rules: String = "japanese",
+    maxVisits: Int? = null,
+    includeOwnership: Boolean? = null,
+    includeMovesOwnership: Boolean? = null,
+    includePolicy: Boolean? = null,
+    overrideSettings: OverrideSettings? = null,
+    analyzeTurns: List<Int>? = null,
+    reportDuringSearchEvery: Float? = null,
+    priority: Int? = null,
+  ): Query {
     val initialPosition = mutableSetOf<List<String>>()
     val history = mutableListOf<List<String>>()
     sequence.map { pos ->
@@ -163,8 +218,8 @@ class KataGoAnalysisEngine(private val context: Context) {
       }
     }
 
-    val query = Query(
-      id = id,
+    return Query(
+      id = generateId(),
       boardXSize = sequence.firstOrNull()?.boardWidth ?: 19,
       boardYSize = sequence.firstOrNull()?.boardHeight ?: 19,
       includeOwnership = includeOwnership,
@@ -175,22 +230,65 @@ class KataGoAnalysisEngine(private val context: Context) {
       maxVisits = maxVisits,
       overrideSettings = overrideSettings,
       moves = history,
-      rules = rules
+      rules = rules,
+      analyzeTurns = analyzeTurns,
+      reportDuringSearchEvery = reportDuringSearchEvery,
+      priority = priority,
     )
+  }
 
-    val stringQuery = appJson.encodeToString(query)
+  /**
+   * Sends [query] and emits its responses (partial ones too when reportDuringSearchEvery is set)
+   * until [expectedFinalResponses] final responses arrived - one per entry of analyzeTurns.
+   * Cancelling the collector terminates the search in KataGo.
+   */
+  fun analyze(query: Query, expectedFinalResponses: Int = 1): Flow<Response> = flow {
+    var finals = 0
+    try {
+      emitAll(
+        responseFlow
+          // Subscribe before writing, otherwise a fast answer could be missed.
+          .onSubscription { send(appJson.encodeToString(query)) }
+          .filter { it.id == query.id }
+          .transformWhile { r ->
+            when (r) {
+              is ErrorResponse -> {
+                r.error?.let { throw RuntimeException(it) }
+                true // a warning: keep waiting for the real answer
+              }
 
-    Logger.i("> $stringQuery", tag = "KataGoAnalysisEngine")
-    writer?.apply {
-      write(stringQuery + "\n")
-      flush()
+              is Response -> {
+                emit(r)
+                if (!r.isDuringSearch) finals++
+                finals < expectedFinalResponses
+              }
+            }
+          }
+      )
+    } finally {
+      if (finals < expectedFinalResponses) {
+        terminate(query.id)
+      }
     }
+  }
 
-    val response = responseFlow.first { it.id == id }
-    if (response is ErrorResponse) {
-      throw RuntimeException(response.error)
+  private fun terminate(queryId: String) {
+    if (started) {
+      send(appJson.encodeToString(TerminateQuery(id = "stop-$queryId", terminateId = queryId)))
     }
-    return response as Response
+  }
+
+  @Synchronized
+  private fun send(line: String) {
+    Logger.i("> $line", tag = "KataGoAnalysisEngine")
+    try {
+      writer?.apply {
+        write(line + "\n")
+        flush()
+      }
+    } catch (e: IOException) {
+      Logger.e("Could not write to KataGo", e, "KataGoAnalysisEngine")
+    }
   }
 
   private fun generateId() = requestIDX.incrementAndFetch().toString()

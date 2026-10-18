@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">Sente - Online GO</string>
+    <string name="app_name">Sente Sensei - Online GO</string>
     <string name="create_account_prompt">No OGS account? Create one <b>here</b>!</string>
     <string name="login_to_ogs">Login to OGS</string>
     <string name="create_account">Create OGS account</string>
@@ -815,4 +815,26 @@ If you succeed white will have a tough time ensuring both groups survive."]]></s
 However, the territory on the lower side is not all white's.
 
 Just cut white's wall."]]></string>
+    <!-- Go Sensei fork: KataGo analysis of finished games -->
+    <string name="analysis_engine_starting">Starting KataGo…</string>
+    <string name="analysis_engine_failed">KataGo could not start</string>
+    <string name="analysis_lead">%1$s leads by %2$.1f</string>
+    <string name="analysis_even">Even game</string>
+    <string name="analysis_black">Black</string>
+    <string name="analysis_white">White</string>
+    <string name="analysis_black_winrate">Black wins %1$.0f%%</string>
+    <string name="analysis_visits">%1$d visits</string>
+    <string name="analysis_suggestions">Suggestions</string>
+    <string name="analysis_territory">Territory</string>
+    <string name="analysis_review_start">Review the whole game</string>
+    <string name="analysis_review_progress">Reviewing the game… %1$d/%2$d</string>
+    <string name="analysis_review_error">Review failed: %1$s</string>
+    <string name="analysis_mistakes_mine">Your mistakes</string>
+    <string name="analysis_mistakes_all">Mistakes</string>
+    <string name="analysis_no_mistakes">No significant mistakes</string>
+    <string name="analysis_played_next">Played in the game: %1$s</string>
+    <string name="analysis_points_lost">−%1$.1f pts</string>
+    <string name="analysis_good_move">good move</string>
+    <string name="analysis_variation">Variation</string>
+    <string name="analysis_score_graph">Score (Black up)</string>
 </resources>

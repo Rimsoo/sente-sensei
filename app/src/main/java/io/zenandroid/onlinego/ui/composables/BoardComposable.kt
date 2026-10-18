@@ -57,6 +57,18 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 
+/**
+ * Go Sensei fork: a disc drawn on an empty intersection with a short text, e.g. an engine
+ * candidate move coloured by quality with its score.
+ */
+@Immutable
+data class BoardCandidate(
+  val cell: Cell,
+  val text: String,
+  val color: Color,
+  val highlighted: Boolean = false,
+)
+
 @ExperimentalComposeUiApi
 @Composable
 fun Board(
@@ -70,6 +82,7 @@ fun Board(
   drawCoordinates: Boolean = LocalThemeSettings.current.showCoordinates,
   hints: ImmutableList<MoveInfo>? = null,
   ownership: ImmutableList<Float>? = null,
+  candidates: ImmutableList<BoardCandidate>? = null,
   interactive: Boolean = true,
   drawShadow: Boolean = true,
   drawTerritory: Boolean = false,
@@ -215,6 +228,10 @@ fun Board(
 
           hints?.let { hints ->
             drawHints(it, hints, measurements)
+          }
+
+          candidates?.let { candidates ->
+            drawCandidates(candidates, measurements)
           }
         }
         candidateMove?.let {
@@ -386,6 +403,29 @@ private fun DrawScope.drawHints(
   }
 }
 
+
+private fun DrawScope.drawCandidates(
+  candidates: List<BoardCandidate>,
+  measurements: Measurements,
+) {
+  val radius = measurements.cellSize / 2f - measurements.stoneSpacing
+  for (candidate in candidates) {
+    if (candidate.cell.isPass) continue
+    val center = getCellCenter(candidate.cell.x, candidate.cell.y, measurements)
+    drawCircle(candidate.color.copy(alpha = .88f), radius, center)
+    if (candidate.highlighted) {
+      drawCircle(Color(0xFF0B5E4F), radius, center, style = Stroke(measurements.decorationsLineWidth * 1.5f))
+    }
+    drawTextCentred(
+      candidate.text,
+      center.x,
+      center.y,
+      textSize = measurements.textSize * if (candidate.text.length > 3) .72f else .85f,
+      color = android.graphics.Color.BLACK,
+      paint = measurements.textPaint,
+    )
+  }
+}
 
 private fun DrawScope.drawTerritory(position: Position, measurements: Measurements) {
   for (i in 0 until position.boardWidth) {

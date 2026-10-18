@@ -61,11 +61,16 @@ class AiGameViewModel(
     restoreState()
   }
 
+  // Only release the shared engine if we actually acquired it (see KataGoAnalysisEngine.users)
+  @Volatile
+  private var engineAcquired = false
+
   private fun startEngine() {
     viewModelScope.launch {
       try {
         withContext(Dispatchers.IO) {
-          kataGoAnalysisEngine.start()
+          kataGoAnalysisEngine.acquire()
+          engineAcquired = true
           _state.update { it.copy(engineStarted = true) }
         }
         onLoadingComplete()
@@ -757,8 +762,10 @@ class AiGameViewModel(
     hintJob?.cancel()
     ownershipJob?.cancel()
     finalScoreJob?.cancel()
-    applicationCoroutineScope.launch(Dispatchers.IO) {
-      kataGoAnalysisEngine.stop()
+    if (engineAcquired) {
+      applicationCoroutineScope.launch(Dispatchers.IO) {
+        kataGoAnalysisEngine.release()
+      }
     }
   }
 }

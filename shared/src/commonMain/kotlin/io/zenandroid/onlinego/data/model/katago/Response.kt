@@ -30,6 +30,8 @@ sealed interface KataGoResponse {
     // Present only when overrideSettings.humanSLProfile + includePolicy are set; same
     // row-major, pass-index-last layout as `policy`/`ownership`. See selectHumanMove.
     val humanPolicy: List<Float>? = null,
+    // Go Sensei: true for partial results sent because of reportDuringSearchEvery
+    val isDuringSearch: Boolean = false,
   ) : KataGoResponse
 }
 
